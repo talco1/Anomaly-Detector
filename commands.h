@@ -26,13 +26,14 @@ struct linkerStruct {
 	HybridAnomalyDetector detector;
 	TimeSeries* trainTs;
 	TimeSeries* testTs;
+	int numOfLines;
 };
 
 class LinkingClass {
 public:
 	linkerStruct linker;
-	LinkingClass();
-	~LinkingClass();
+	LinkingClass(){}
+	~LinkingClass(){}
 	void setTrainTs(const char* CSVfileName) {
 		TimeSeries* ts = new TimeSeries (CSVfileName);
 		*linker.trainTs = *ts;
@@ -47,9 +48,9 @@ public:
 class Command{
 protected:
 	DefaultIO* dio;
-	string description;
 	LinkingClass* data;
 public:
+	string description;
 	Command(DefaultIO* dio, LinkingClass* data):dio(dio), data(data){}
 	virtual void execute()=0;
 	virtual ~Command(){}
@@ -58,55 +59,49 @@ public:
 // implement here your command classes
 
 class Command1:public Command{
-private:
-	static int numOfLines;
 public:
 	Command1(DefaultIO* dio, LinkingClass* data):Command(dio, data) {
-		description = "1. upload a time series csv file";
-		numOfLines = 0;
+		description = "1. upload a time series csv file\n";
 	}
 	virtual void execute() {
 		//train file
-		dio->write("Please uplaod your local train CSV file.");
-		ofstream out("anomalyTrain.csv");
-		string input = dio->read();
-		while (input != "done") {
-			out << input << endl;
-			input = dio->read();
-		}
-		out.close();
-		dio->write("Upload Complete.");
+		dio->write("Please uplaod your local train CSV file.\n");
+		writeFile("anomalyTrain.csv");
 		//test file
-		dio->write("Please uplaod your local test CSV file.");
-		ofstream out("anomalyTest.csv");
-		input = dio->read();
-		while (input != "done") {
-			numOfLines++;
-			out << input << endl;
-			input = dio->read();
-		}
-		out.close();
-		dio->write("Upload Complete.");
+		dio->write("Please uplaod your local test CSV file.\n");
+		data->linker.numOfLines = writeFile("anomalyTest.csv");
 		//save files in timeseries
 		data->setTrainTs("anomalyTrain.csv");
 		data->setTestTs("anomalyTest.csv");
 	}
-	static int getNumOfLines() {
-		return numOfLines;
+private:
+	int writeFile(string fileName) {
+		ofstream out(fileName);
+		int lines = 0;
+		string input = dio->read();
+		while (input != "done") {
+			lines++;
+			out << input << endl;
+			input = dio->read();
+		}
+		out.close();
+		dio->write("Upload Complete.\n");
+		return lines;
 	}
 };
 
 class Command2:public Command {
+public:
 	Command2(DefaultIO* dio, LinkingClass* data):Command(dio, data) {
-		description = "2. algorithm settings";
+		description = "2. algorithm settings\n";
 	}
 	virtual void execute() {
-		dio->write("The current correlation threshold is 0.9");
+		dio->write("The current correlation threshold is 0.9\n");
 		string input = dio->read();
 		while(stof(input) < 0 || stof(input) > 1) {
-			dio->write("please choose a value between 0 and 1.");
+			dio->write("please choose a value between 0 and 1.\n");
 			dio->read(); // check if needed or not --- for enter
-			dio->write("The current correlation threshold is 0.9");
+			dio->write("The current correlation threshold is 0.9\n");
 			input = dio->read();
 		}
 		data->linker.detector.setThreshold(stof(input)); //update threshold
@@ -114,58 +109,52 @@ class Command2:public Command {
 };
 
 class Command3:public Command {
+public:
 	Command3(DefaultIO* dio, LinkingClass* data):Command(dio, data) {
-		description = "3. detect anomalies";
+		description = "3. detect anomalies\n";
 	}
 	virtual void execute() {
 		data->linker.detector.learnNormal(*data->linker.trainTs);
 		data->linker.detector.detect(*data->linker.testTs);
+		dio->write("anomaly detection complete.\n");
 	}
 };
 
 class Command4:public Command {
+public:
 	Command4(DefaultIO* dio, LinkingClass* data):Command(dio, data) {
-		description = "4. display results";
+		description = "4. display results\n";
 	}
 	virtual void execute() {
-		// check id the reports are in the correct order 
+		// check if the reports are in the correct order 
 		vector<AnomalyReport> reports = data->linker.detector.detect(*data->linker.testTs);
 		for (auto it = reports.begin(); it != reports.end(); it++) {
-			string output = it->timeStep + "	" + it->description;
+			string output = it->timeStep + "	" + it->description + "\n";
 			dio->write(output);
 		}
-		dio->write("Done.");
+		dio->write("Done.\n");
 	}
 };
 
 class Command5:public Command {
+public:
 	Command5(DefaultIO* dio, LinkingClass* data):Command(dio, data) {
-		description = "5. upload anomalies and analyze results";
+		description = "5. upload anomalies and analyze results\n";
 	}
 	virtual void execute() {
-		map<vector<pair<long, long>>, bool> anomaly;
-		vector<pair<long, long>> anomalies; // to save the reported anomalies
-		map<string, vector<pair<long, long>>> detectorAnomalies;
-		int arr[2];
-		int p = 0, sum = 0; // p is number of anomalies, sum is amount of anomalies
-		dio->write("Please upload your local anomalies file.");
+		vector<pair<long, long>> trueAnomlies;
+		vector<pair<long,long>> reportedAnomalies;
+		int P = 0, N = 0, TP = 0, FP = 0, sumOfAnomalies = 0;
+		dio->write("Please upload your local anomalies file.\n");
 		string input = dio->read();
-		// read the file
-		while (input != "done") {
-			p++;
-			int i = 0;
-			stringstream s(input);
-			string subString;
-			// save the time steps
-			while (getline(s, subString, ',')) {
-				arr[i] = stol(subString);
-				i++;
-			}
-			anomalies.push_back({arr[0], arr[1]});
-			sum += ((arr[1] - arr[0]) + 1);
+		while(input != "done") {
+			P++;
+			size_t pos = input.find(',');
+			long str1 = stol(input.substr(0, pos)), str2 = stol(input.substr(pos + 1));
+			trueAnomlies.push_back({str1, str2}); //timesteps of the anomaly
+			sumOfAnomalies += (str2 - str1 + 1);
 			input = dio->read();
 		}
-		// save reported anomalies according to timestep
 		vector<AnomalyReport> reports = data->linker.detector.detect(*data->linker.testTs);
 		auto it = reports.begin();
 		while (it != reports.end()) {
@@ -176,53 +165,52 @@ class Command5:public Command {
 				end = it->timeStep;
 				it++;
 			}
-			detectorAnomalies[desc].push_back({start, end});
+			reportedAnomalies.push_back({start, end});
 		}
-		int n = Command1::getNumOfLines() - 1;
-		int N = n - sum, FP = 0, i = 0, TP = 0;
-		bool* arr[anomalies.size()];
-		for (auto it = detectorAnomalies.begin(); it != detectorAnomalies.end(); it++) { //desctription
-			for (auto itVec = it->second.begin(); itVec!= it->second.end(); itVec++) { //anomalies
-				long x = itVec->first, y = itVec->second;
-				bool isReported = false;
-				i = 0;
-				for (auto itAno = anomalies.begin(); itAno != anomalies.end(); itAno++) {
-					if ((x >= itAno->first && x <= itAno->second) || (y >= itAno->first && y <= itAno->second)) {
-						isReported = true;
-						if (!arr[i]) {
-							TP++;
-						}
-						arr[i] = true;
+		bool isReported[P]; // if true anomaly was detected
+		for (auto it = reportedAnomalies.begin(); it != reportedAnomalies.end(); it++) {
+			int i = 0;
+			bool isTrueReport = false; // if the reported anomaly is true
+			for (auto it2 = trueAnomlies.begin(); it2 != trueAnomlies.end(); it2++) {
+				if ((it->first >= it2->first && it->first <= it2->second) 
+				|| (it->second >= it2->first && it->second <= it2->second)) {
+					isTrueReport = true; // the reported anomaly is true
+					if(!isReported[i]) {
+						TP++; // this frame of anomaly was reported for the first time
 					}
-					if (!isReported) {
-						FP++;
-					}
-					i++;
+					isReported[i] = true;
 				}
+				i++;
+			}
+			if (!isTrueReport) {
+				FP++;
 			}
 		}
-		float tpr = TP/p, far = FP/N;
-		tpr *= 1000;
-		tpr = floor(tpr);
-		tpr /= 1000;
-		far *= 1000;
-		far = floor(tpr);
-		far /= 1000;
-		string output = "True Positive Rate: " + to_string(tpr);
+		N = data->linker.numOfLines - sumOfAnomalies;
+		float tpr = floor(1000*(TP/P))/1000, far = floor(1000*(FP/N))/1000;
+		string output = "True Positive Rate: " + to_string(tpr) + "\n";
 		dio->write(output);
-		output = "False Positive Rate: " + to_string(far);
+		output = "False Positive Rate: " + to_string(far) + "\n";
 		dio->write(output);
 	}
 };
 
 class Command6:public Command {
+public:
 	Command6(DefaultIO* dio, LinkingClass* data):Command(dio, data) {
-		description = "6. exit";
+		description = "6. exit\n";
 	}
 	virtual void execute() {
-
 	}
 };
 
+class UploadCommand:public Command {
+public:
+	UploadCommand(DefaultIO* dio, LinkingClass* data):Command(dio, data) {
+		description = "Welcome to the Anomaly Detection Server.\nPlease choose an option:\n";
+	}
+	virtual void execute() {
+	}
+};
 
 #endif /* COMMANDS_H_ */
