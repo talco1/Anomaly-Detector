@@ -10,6 +10,7 @@ class HybridAnomalyDetector:public SimpleAnomalyDetector {
 public:
 	HybridAnomalyDetector();
 	virtual ~HybridAnomalyDetector();
+	void setThreshold(float n);
 protected:
 	virtual bool checkAnomaly(Point p, correlatedFeatures cf);
 	virtual void updateCf(correlatedFeatures* cf, Point** points, int size);

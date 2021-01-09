@@ -33,19 +33,3 @@ bool HybridAnomalyDetector::checkAnomaly(Point p, correlatedFeatures cf){
 void HybridAnomalyDetector::setThreshold(float n) {
 	threshold = n;
 }
-
-/*
-void try(float pearson, string feature1, string feature2, Point** points, int size) {
-	if (pearson >= 0.9) {
-		//call simple
-	} else if (pearson > 0.5) {
-		struct correlatedFeatures cf = {};
-		cf.feature1 = feature1;
-		cf.feature2 = feature2;
-		cf.corrlation = pearson;
-		Circle minCircle = findMinCircle(points, size);
-		cf.center = new Point(minCircle.center.x, minCircle.center.y);
-		cf.threshold = minCircle.radius*1.1;
-	}
-}
-*/
